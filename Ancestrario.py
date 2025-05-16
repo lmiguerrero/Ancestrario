@@ -55,6 +55,10 @@ fondos_disponibles = {
     "Esri World Topo Map": "Esri.WorldTopoMap"
 }
 
+# Mostrar logo institucional en el sidebar (esto va FUERA del with tab1:)
+logo = Image.open("logo_ant.jpg")
+st.sidebar.image(logo, use_container_width=True)
+
 # --- Pestañas ---
 tab1, tab2 = st.tabs(["🔍 Consulta por filtros", "📐 Consulta por traslape"])
 
