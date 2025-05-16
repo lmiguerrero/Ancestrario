@@ -220,6 +220,7 @@ with tab2:
                     center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
                     m2 = folium.Map(location=center, zoom_start=10, tiles="CartoDB positron")
 
+                    # Mostrar predio en rojo
                     folium.GeoJson(
                         user_shp,
                         name="Polígono cargado",
@@ -230,20 +231,38 @@ with tab2:
                         }
                     ).add_to(m2)
 
+                    # Obtener territorios que intersectan
+                    territorios_afectados = gdf[gdf.intersects(user_shp.unary_union)]
+
                     # Calcular intersección exacta
-                    intersecciones = gpd.overlay(gdf, user_shp, how="intersection")
-                    intersecciones = intersecciones.to_crs(epsg=9377)  # Proyección métrica
-
-                    intersecciones["area_m2"] = intersecciones.geometry.area
-                    intersecciones["area_ha"] = intersecciones["area_m2"] / 10000
-
-                    area_predio_m2 = user_shp.to_crs(epsg=9377).geometry.area.sum()
-                    intersecciones["area_territorio_m2"] = intersecciones["AREA_TOTAL"] * 10000
-
-                    intersecciones["% del predio"] = (intersecciones["area_m2"] / area_predio_m2 * 100).round(2)
-                    intersecciones["% del territorio"] = (intersecciones["area_m2"] / intersecciones["area_territorio_m2"] * 100).round(2)
+                    intersecciones = gpd.overlay(gdf, user_shp, how="intersection").to_crs(epsg=9377)
 
                     if not intersecciones.empty:
+                        intersecciones["area_m2"] = intersecciones.geometry.area
+                        intersecciones["area_ha"] = intersecciones["area_m2"] / 10000
+
+                        area_predio_m2 = user_shp.to_crs(epsg=9377).geometry.area.sum()
+                        intersecciones["area_territorio_m2"] = intersecciones["AREA_TOTAL"] * 10000
+
+                        intersecciones["% del predio"] = (intersecciones["area_m2"] / area_predio_m2 * 100).round(2)
+                        intersecciones["% del territorio"] = (intersecciones["area_m2"] / intersecciones["area_territorio_m2"] * 100).round(2)
+
+                        # Dibujar territorios completos (bordes)
+                        def borde_tipo(x):
+                            tipo = x["properties"]["Tipo"].strip().lower()
+                            return {
+                                "color": "#004400" if "indigena" in tipo else "#663300",
+                                "weight": 1.5,
+                                "fillOpacity": 0
+                            }
+
+                        folium.GeoJson(
+                            territorios_afectados,
+                            style_function=borde_tipo,
+                            name="Territorios completos"
+                        ).add_to(m2)
+
+                        # Dibujar intersección (relleno)
                         def estilo_tipo(x):
                             tipo = x["properties"]["Tipo"].strip().lower()
                             return {
@@ -272,9 +291,9 @@ with tab2:
 
                         csv_traslape = tabla.to_csv(index=False).encode("utf-8")
                         st.download_button("⬇️ Descargar CSV del traslape", data=csv_traslape, file_name="traslapes_con_area.csv", mime="text/csv")
-
                     else:
                         st.info("✅ No se encontraron traslapes con territorios formalizados.")
+
 # --- Derechos de autor ---
 st.markdown("""
 <hr style='border-top: 1px solid #444;'>
