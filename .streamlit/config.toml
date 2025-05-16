@@ -1,0 +1,11 @@
+[server]
+headless = true
+runOnSave = true
+maxMessageSize = 300
+
+[theme]
+base = "dark"
+primaryColor = "#00cc66"
+backgroundColor = "#1b2e1b"
+secondaryBackgroundColor = "#264d26"
+textColor = "white"

@@ -40,7 +40,7 @@ def cargar_shapefile_desde_zip(path_zip):
             return gpd.read_file(shp_path).to_crs(epsg=4326)
 
 # --- Rutas ---
-ruta_formalizado = "C:/VISOR_ANT/Formalizado.zip"
+ruta_formalizado = "Formalizado.zip"
 
 # --- Cargar shapefile principal ---
 gdf = cargar_shapefile_desde_zip(ruta_formalizado)
