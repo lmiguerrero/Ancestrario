@@ -230,9 +230,20 @@ with tab2:
                         }
                     ).add_to(m2)
 
-                    traslapados = gdf[gdf.intersects(user_shp.unary_union)]
+                    # Calcular intersección exacta
+                    intersecciones = gpd.overlay(gdf, user_shp, how="intersection")
+                    intersecciones = intersecciones.to_crs(epsg=9377)  # Proyección métrica
 
-                    if not traslapados.empty:
+                    intersecciones["area_m2"] = intersecciones.geometry.area
+                    intersecciones["area_ha"] = intersecciones["area_m2"] / 10000
+
+                    area_predio_m2 = user_shp.to_crs(epsg=9377).geometry.area.sum()
+                    intersecciones["area_territorio_m2"] = intersecciones["AREA_TOTAL"] * 10000
+
+                    intersecciones["% del predio"] = (intersecciones["area_m2"] / area_predio_m2 * 100).round(2)
+                    intersecciones["% del territorio"] = (intersecciones["area_m2"] / intersecciones["area_territorio_m2"] * 100).round(2)
+
+                    if not intersecciones.empty:
                         def estilo_tipo(x):
                             tipo = x["properties"]["Tipo"].strip().lower()
                             return {
@@ -243,10 +254,10 @@ with tab2:
                             }
 
                         folium.GeoJson(
-                            traslapados,
+                            intersecciones.to_crs(epsg=4326),
                             tooltip=folium.GeoJsonTooltip(
-                                fields=["ID_ANT", "NOMBRE", "DEPARTAMEN", "MUNICIPIO", "Tipo", "AREA_TOTAL"],
-                                aliases=["ID:", "Nombre:", "Departamento:", "Municipio:", "Tipo:", "Área total (ha):"]
+                                fields=["NOMBRE", "Tipo", "area_ha", "% del predio", "% del territorio"],
+                                aliases=["Nombre:", "Tipo:", "Área traslapada (ha):", "% del predio:", "% del territorio:"]
                             ),
                             style_function=estilo_tipo
                         ).add_to(m2)
@@ -254,14 +265,16 @@ with tab2:
                         m2.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
                         st_folium(m2, width=1200, height=600)
 
-                        st.subheader("📋 Territorios traslapados")
-                        st.dataframe(traslapados.drop(columns="geometry"))
+                        st.subheader("📋 Detalles del traslape")
+                        tabla = intersecciones[["ID_ANT", "NOMBRE", "Tipo", "DEPARTAMEN", "MUNICIPIO", "area_ha", "% del predio", "% del territorio"]]
+                        tabla["area_ha"] = tabla["area_ha"].round(2)
+                        st.dataframe(tabla)
 
-                        csv_t = traslapados.drop(columns="geometry").to_csv(index=False).encode("utf-8")
-                        st.download_button("⬇️ Descargar CSV del traslape", data=csv_t, file_name="traslapes.csv", mime="text/csv")
+                        csv_traslape = tabla.to_csv(index=False).encode("utf-8")
+                        st.download_button("⬇️ Descargar CSV del traslape", data=csv_traslape, file_name="traslapes_con_area.csv", mime="text/csv")
+
                     else:
                         st.info("✅ No se encontraron traslapes con territorios formalizados.")
-
 # --- Derechos de autor ---
 st.markdown("""
 <hr style='border-top: 1px solid #444;'>
