@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 import streamlit as st
 import geopandas as gpd
 import folium
@@ -12,9 +6,10 @@ import os
 import zipfile
 import tempfile
 import pandas as pd
+from PIL import Image
 
 # --- Estilo visual ---
-st.set_page_config(page_title="Visor de Territorios Formalizados", layout="wide")
+st.set_page_config(page_title="Ancestrario", layout="wide")
 st.markdown("""
     <style>
     html, body, .stApp {
@@ -28,8 +23,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- Título y banner ---
 st.title("📜 Visor de Territorios Formalizados")
 st.markdown("Consulta local de territorios por ID o Nombre. Fuente: ANT")
+
+# Mostrar banner
+banner = Image.open("Ancestrario.png")
+st.image(banner, use_column_width=True)
 
 # --- Función para cargar shapefile desde ZIP ---
 def cargar_shapefile_desde_zip(path_zip):
@@ -62,7 +62,8 @@ fondos_disponibles = {
     "CartoDB Claro (Positron)": "CartoDB positron",
     "CartoDB Oscuro": "CartoDB dark_matter",
     "Satélite (Esri)": "Esri.WorldImagery",
-    "Gris claro (Esri Gray Canvas)": "Esri.WorldGrayCanvas"
+    "Esri NatGeo World Map": "Esri.NatGeoWorldMap",
+    "Esri World Topo Map": "Esri.WorldTopoMap"
 }
 fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
@@ -193,3 +194,13 @@ if st.session_state["mostrar_mapa"]:
     else:
         st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
+# --- Derechos de autor ---
+st.markdown("""
+<hr style='border-top: 1px solid #444;'>
+
+<div style='text-align: center; font-size: 14px; color: gray; padding-top: 10px;'>
+    Realizado por <strong>Ing. Topográfico Luis Miguel Guerrero</strong> — 
+    <a href="mailto:luis.guerrero@ant.gov.co" style="color:gray;">luis.guerrero@ant.gov.co</a><br>
+    <em>© Derechos reservados</em>
+</div>
+""", unsafe_allow_html=True)
