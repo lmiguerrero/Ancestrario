@@ -29,7 +29,7 @@ st.markdown("Consulta local de territorios por ID o Nombre. Fuente: ANT")
 
 # Mostrar banner
 banner = Image.open("Ancestrario.png")
-st.image(banner, use_column_width=True)
+st.image(banner, use_container_width=True)
 
 # --- Función para cargar shapefile desde ZIP ---
 def cargar_shapefile_desde_zip(path_zip):
