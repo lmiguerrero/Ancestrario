@@ -61,7 +61,7 @@ def cargar_shapefile_desde_zip(zip_source):
     with tempfile.TemporaryDirectory() as tmpdir:
         if zip_source.startswith("http"):
             # Descargar el archivo ZIP desde la URL
-            st.info(f"Descargando datos desde: {zip_source}")
+            # st.info(f"Descargando datos desde: {zip_source}")
             try:
                 response = requests.get(zip_source, stream=True)
                 response.raise_for_status() # Lanza un error para códigos de estado HTTP incorrectos
