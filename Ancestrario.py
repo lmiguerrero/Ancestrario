@@ -7,12 +7,12 @@ import zipfile
 import tempfile
 import pandas as pd
 from PIL import Image
-import requests # Importar la librería requests para descargar desde URL
-from io import BytesIO # Para manejar el contenido descargado en memoria
+import requests
+from io import BytesIO
 
 # ======================================================================================================================
 # Visor de Territorios Formalizados (Ancestrario)
-#
+# 26-06-2025
 # Desarrollado por: Ing. Topográfico Luis Miguel Guerrero
 # Contacto: luis.guerrero@ant.gov.co
 #
@@ -28,19 +28,19 @@ from io import BytesIO # Para manejar el contenido descargado en memoria
 # ======================================================================================================================
 
 # --- Estilo visual de la aplicación ---
-st.set_page_config(page_title="Ancestrario", layout="wide") # Configura el título de la página y el diseño.
+st.set_page_config(page_title="Ancestrario", layout="wide")
 st.markdown("""
     <style>
     html, body, .stApp {
-        background-color: #1b2e1b; /* Color de fondo oscuro */
-        color: white; /* Color de texto principal */
+        background-color: #1b2e1b;
+        color: white;
     }
     .stButton>button {
-        background-color: #346b34; /* Color de fondo para botones */
-        color: white; /* Color de texto para botones */
+        background-color: #346b34;
+        color: white;
     }
     </style>
-""", unsafe_allow_html=True) # Aplica estilos CSS personalizados.
+""", unsafe_allow_html=True)
 
 # --- Título y banner principal ---
 st.title("📜 Visor de Territorios Formalizados")
@@ -50,7 +50,7 @@ st.markdown("Consulta local de territorios por ID o Nombre. Fuente: ANT")
 st.image("Ancestrario.png", use_container_width=True)
 
 # --- Función para cargar shapefile desde ZIP (ahora soporta URL) ---
-@st.cache_data # Cachea los datos para mejorar el rendimiento
+@st.cache_data
 def cargar_shapefile_desde_zip(zip_source):
     """
     Carga un archivo shapefile contenido dentro de un archivo ZIP.
@@ -61,35 +61,31 @@ def cargar_shapefile_desde_zip(zip_source):
     with tempfile.TemporaryDirectory() as tmpdir:
         if zip_source.startswith("http"):
             # Descargar el archivo ZIP desde la URL
-            # st.info(f"Descargando datos desde: {zip_source}")
             try:
                 response = requests.get(zip_source, stream=True)
-                response.raise_for_status() # Lanza un error para códigos de estado HTTP incorrectos
+                response.raise_for_status()
                 zip_content = BytesIO(response.content)
                 zip_ref = zipfile.ZipFile(zip_content, "r")
             except requests.exceptions.RequestException as e:
                 st.error(f"Error al descargar el archivo ZIP: {e}")
-                st.stop() # Detiene la ejecución de la aplicación si falla la descarga
+                st.stop()
         else:
             # Abrir archivo ZIP local
             zip_ref = zipfile.ZipFile(zip_source, "r")
 
         with zip_ref as zf:
-            zf.extractall(tmpdir) # Extrae todos los archivos del ZIP al directorio temporal
-            # Encuentra el archivo .shp dentro del directorio temporal
+            zf.extractall(tmpdir)
             shp_paths = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
             if not shp_paths:
                 st.error("No se encontró ningún archivo .shp dentro del ZIP.")
                 st.stop()
             shp_path = shp_paths[0]
-            return gpd.read_file(shp_path).to_crs(epsg=4326) # Lee el shapefile y lo convierte a WGS84
+            return gpd.read_file(shp_path).to_crs(epsg=4326)
 
 # --- Cargar shapefile principal de territorios formalizados ---
-# Nuevo link de descarga desde GitHub
 ruta_formalizado = "https://github.com/lmiguerrero/Ancestrario/raw/main/Formalizados.zip"
 gdf = cargar_shapefile_desde_zip(ruta_formalizado)
 
-# Asegura que las columnas de tipo Timestamp se conviertan a string para evitar errores de serialización
 for col in gdf.columns:
     if isinstance(gdf[col].iloc[0], pd.Timestamp):
         gdf[col] = gdf[col].astype(str)
@@ -109,7 +105,6 @@ logo = Image.open("logo_ant.jpg")
 st.sidebar.image(logo, use_container_width=True)
 
 # --- Pestañas de la aplicación ---
-# Solo se mantiene la pestaña de "Consulta por filtros"
 tab1 = st.tabs(["🔍 Consulta por filtros"])[0]
 
 # ===============================
@@ -118,53 +113,49 @@ tab1 = st.tabs(["🔍 Consulta por filtros"])[0]
 with tab1:
     st.sidebar.header("🔎 Filtros de búsqueda")
 
-    # Campos de entrada y selección para filtros
     id_input = st.sidebar.text_input("Buscar por ID (ID_ANT):")
     nombre_input = st.sidebar.selectbox("Buscar por Nombre (NOMBRE):", options=[""] + sorted(gdf['NOMBRE'].dropna().unique()))
     tipo_sel = st.sidebar.multiselect("Filtrar por tipo (Tipo)", sorted(gdf["Tipo"].dropna().unique()))
     depto_sel = st.sidebar.multiselect("Filtrar por departamento", sorted(gdf["DEPARTAMEN"].dropna().unique()))
     mpio_sel = st.sidebar.multiselect("Filtrar por municipio", sorted(gdf["MUNICIPIO"].dropna().unique()))
 
-    # Selector de fondo de mapa
     fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
-    # Inicializa el estado de la sesión para mostrar el mapa
+    # --- Nueva opción para el estilo de visualización del polígono ---
+    visualizacion_poligono = st.sidebar.radio(
+        "🎨 Estilo de Visualización del Polígono",
+        ("Con Relleno", "Solo Contorno"),
+        index=0 # Por defecto: "Con Relleno"
+    )
+
     if "mostrar_mapa" not in st.session_state:
         st.session_state["mostrar_mapa"] = False
 
-    # Botones de acción en la barra lateral
     col1, col2, col3 = st.sidebar.columns(3)
     with col1:
         if st.button("🧭 Mostrar mapa"):
             st.session_state["mostrar_mapa"] = True
     with col2:
         if st.button("🔄 Reiniciar visor"):
-            # Reinicia todas las variables de estado para limpiar filtros y mapa
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
-            st.rerun() # Vuelve a ejecutar la aplicación para aplicar el reinicio
+            st.rerun()
     with col3:
         exportar_html = st.button("💾 Exportar HTML")
 
-    # --- Aplicación de filtros al GeoDataFrame ---
-    gdf_filtrado = gdf.copy() # Crea una copia para no modificar el original
+    # Filtros
+    gdf_filtrado = gdf.copy()
     if id_input:
-        # Filtra por ID_ANT, buscando coincidencias parciales
         gdf_filtrado = gdf_filtrado[gdf_filtrado["ID_ANT"].astype(str).str.contains(id_input)]
     if nombre_input:
-        # Filtra por nombre exacto
         gdf_filtrado = gdf_filtrado[gdf_filtrado["NOMBRE"] == nombre_input]
     if tipo_sel:
-        # Filtra por tipo (permite múltiples selecciones)
         gdf_filtrado = gdf_filtrado[gdf_filtrado["Tipo"].isin(tipo_sel)]
     if depto_sel:
-        # Filtra por departamento (permite múltiples selecciones)
         gdf_filtrado = gdf_filtrado[gdf_filtrado["DEPARTAMEN"].isin(depto_sel)]
     if mpio_sel:
-        # Filtra por municipio (permite múltiples selecciones)
         gdf_filtrado = gdf_filtrado[gdf_filtrado["MUNICIPIO"].isin(mpio_sel)]
 
-    # Mensaje cuando se consulta un único territorio
     if st.session_state["mostrar_mapa"] and len(gdf_filtrado) == 1:
         nombre_unico = gdf_filtrado["NOMBRE"].iloc[0]
         st.markdown(
@@ -173,35 +164,38 @@ with tab1:
             unsafe_allow_html=True
         )
 
-    # --- Mostrar el mapa y los resultados si se ha activado el botón "Mostrar mapa" ---
     if st.session_state["mostrar_mapa"]:
         if not gdf_filtrado.empty:
             st.subheader("🗺️ Resultado geográfico")
 
-            # Calcula los límites del mapa para centrarlo en los resultados
             bounds = gdf_filtrado.total_bounds
             center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
             m = folium.Map(location=center, zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
 
-            # Función para aplicar estilos a los polígonos según el tipo (Indígena o Campesino/Comunitario)
-            def estilo_tipo(x):
+            # Función para aplicar estilos a los polígonos según el tipo y la opción de visualización
+            def estilo_tipo(x, viz_option):
                 tipo = x["properties"]["Tipo"].strip().lower()
+                base_fill_color = "#228B22" if "indigena" in tipo else "#8B4513" # Verde para indígena, marrón para otros
+                base_color = "#228B22" if "indigena" in tipo else "#8B4513" # Color del borde
+
+                # Ajusta la opacidad del relleno según la opción seleccionada
+                fill_opacity = 0.5 if viz_option == "Con Relleno" else 0
+
                 return {
-                    "fillColor": "#228B22" if "indigena" in tipo else "#8B4513", # Verde para indígena, marrón para otros
-                    "color": "#228B22" if "indigena" in tipo else "#8B4513", # Color del borde
+                    "fillColor": base_fill_color,
+                    "color": base_color,
                     "weight": 2,
-                    "fillOpacity": 0.5
+                    "fillOpacity": fill_opacity
                 }
 
-            # Añade los GeoJson filtrados al mapa con tooltips y estilos
             folium.GeoJson(
                 gdf_filtrado,
                 tooltip=folium.GeoJsonTooltip(
-                    # Se añade "Recons" al tooltip
                     fields=["ID_ANT", "NOMBRE", "DEPARTAMEN", "MUNICIPIO", "Tipo", "AREA_TOTAL", "Recons"],
                     aliases=["ID:", "Nombre:", "Departamento:", "Municipio:", "Tipo:", "Área total (ha):", "Reconstruido:"]
                 ),
-                style_function=estilo_tipo
+                # Pasa la opción de visualización a la función de estilo
+                style_function=lambda x: estilo_tipo(x, visualizacion_poligono)
             ).add_to(m)
 
             # --- Añadir Leyenda al mapa ---
@@ -228,26 +222,21 @@ with tab1:
             m.get_root().html.add_child(folium.Element(legend_html))
 
 
-            # Ajusta el mapa para que muestre todos los elementos filtrados
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-            # Renderiza el mapa de Folium en Streamlit
             st_folium(m, width=1200, height=600)
 
             st.subheader("📋 Datos encontrados")
-            # Muestra la tabla de datos de los territorios filtrados
-            # Las columnas 'Recons' y 'Dif_Porc' se incluirán automáticamente si existen en el gdf
             st.dataframe(gdf_filtrado.drop(columns="geometry"))
 
-            # --- Estadísticas de los resultados ---
+            # Estadísticas
             total_comunidades = len(gdf_filtrado)
             area_total = gdf_filtrado["AREA_TOTAL"].sum()
             hectareas = int(area_total)
-            metros2 = int(round((area_total - hectareas) * 10000)) # Calcula los metros cuadrados restantes
+            metros2 = int(round((area_total - hectareas) * 10000))
             tipo_normalizado = gdf_filtrado["Tipo"].str.lower().str.strip()
             cuenta_indigena = tipo_normalizado.str.contains("indigena").sum()
             cuenta_consejo = tipo_normalizado.str.contains("comunitario").sum()
 
-            # Muestra las estadísticas en un cuadro estilizado
             st.markdown(
                 f"""
                 <div style='
@@ -267,18 +256,14 @@ with tab1:
                 unsafe_allow_html=True
             )
 
-            # --- Opciones de exportación de datos ---
-            # Exportar a CSV
-            # Las columnas 'Recons' y 'Dif_Porc' se incluirán automáticamente si existen en el gdf
+            # Exportar
             csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
             st.download_button("⬇️ Descargar CSV", data=csv, file_name="resultados_formalizados.csv", mime="text/csv")
 
-            # Exportar a Shapefile (ZIP)
             with tempfile.TemporaryDirectory() as tmpdir:
                 zip_path = os.path.join(tmpdir, "shapefile_filtrado.zip")
                 shp_base = os.path.join(tmpdir, "shapefile_filtrado")
                 gdf_filtrado.to_file(shp_base + ".shp", driver="ESRI Shapefile", encoding="utf-8")
-                # Crea el archivo ZIP con todos los componentes del shapefile
                 with zipfile.ZipFile(zip_path, "w") as zipf:
                     for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
                         fpath = shp_base + ext
@@ -289,7 +274,7 @@ with tab1:
 
             if exportar_html:
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
-                    m.save(tmpfile.name) # Guarda el mapa de Folium como HTML
+                    m.save(tmpfile.name)
                     st.success("✅ Mapa exportado correctamente.")
                     with open(tmpfile.name, "rb") as f:
                         st.download_button("⬇️ Descargar HTML del mapa", data=f, file_name="mapa_formalizado.html", mime="text/html")
@@ -297,7 +282,7 @@ with tab1:
         else:
             st.warning("⚠️ No se encontraron resultados con los filtros aplicados.")
 
-# --- Sección de derechos de autor ---
+# --- Derechos de autor ---
 st.markdown("""
 <hr style='border-top: 1px solid #444;'>
 <div style='text-align: center; font-size: 14px; color: gray; padding-top: 10px;'>
