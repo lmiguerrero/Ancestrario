@@ -9,7 +9,6 @@ import pandas as pd
 from PIL import Image
 import requests
 from io import BytesIO
-from folium.features import DivIcon
 
 # ======================================================================================================================
 # Visor de Territorios Formalizados (Ancestrario)
@@ -23,7 +22,7 @@ from folium.features import DivIcon
 # Funcionalidades principales:
 # 1. Carga y procesamiento de datos geográficos (Shapefile) desde un archivo ZIP (ahora con soporte para URL).
 # 2. Interfaz de usuario interactiva para filtrar territorios por ID, Nombre, Tipo, Departamento y Municipio.
-# 3. Visualización de los territorios filtrados en un mapa interactivo (Folium) con tooltip mejorado, leyenda y etiquetas.
+# 3. Visualización de los territorios filtrados en un mapa interactivo (Folium) con tooltip mejorado y leyenda.
 # 4. Presentación de datos tabulares y estadísticas de los resultados de la consulta, incluyendo nuevos atributos.
 # 5. Opciones para exportar los resultados (CSV, Shapefile ZIP, HTML del mapa).
 # ======================================================================================================================
@@ -78,7 +77,8 @@ def cargar_shapefile_desde_zip(zip_source):
             zf.extractall(tmpdir)
             shp_paths = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
             if not shp_paths:
-                raise FileNotFoundError("No se encontró ningún archivo .shp dentro del ZIP.")
+                st.error("No se encontró ningún archivo .shp dentro del ZIP.")
+                st.stop()
             shp_path = shp_paths[0]
             return gpd.read_file(shp_path).to_crs(epsg=4326)
 
@@ -121,20 +121,12 @@ with tab1:
 
     fondo_seleccionado = st.sidebar.selectbox("🗺️ Fondo del mapa", list(fondos_disponibles.keys()), index=1)
 
-    # --- Opción para el estilo de visualización del polígono ---
+    # --- Nueva opción para el estilo de visualización del polígono ---
     visualizacion_poligono = st.sidebar.radio(
         "🎨 Estilo de Visualización del Polígono",
         ("Con Relleno", "Solo Contorno"),
         index=0 # Por defecto: "Con Relleno"
     )
-
-    st.sidebar.markdown("---") # Separador visual en el sidebar
-    st.sidebar.subheader("🌍 Capas de Contexto")
-
-    # --- Nueva opción para mostrar límites departamentales (solo esta por ahora) ---
-    mostrar_limites_deptos = st.sidebar.checkbox("Mostrar Límites Departamentales y Etiquetas", value=False)
-    # La opción de límites municipales ha sido eliminada/comentada según lo solicitado
-    # mostrar_limites_mpios = st.sidebar.checkbox("Mostrar Límites Municipales y Etiquetas", value=False)
 
     if "mostrar_mapa" not in st.session_state:
         st.session_state["mostrar_mapa"] = False
@@ -180,12 +172,15 @@ with tab1:
             center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
             m = folium.Map(location=center, zoom_start=10, tiles=fondos_disponibles[fondo_seleccionado])
 
-            # Función para aplicar estilos a los polígonos formalizados
+            # Función para aplicar estilos a los polígonos según el tipo y la opción de visualización
             def estilo_tipo(x, viz_option):
                 tipo = x["properties"]["Tipo"].strip().lower()
-                base_fill_color = "#228B22" if "indigena" in tipo else "#8B4513"
-                base_color = "#228B22" if "indigena" in tipo else "#8B4513"
+                base_fill_color = "#228B22" if "indigena" in tipo else "#8B4513" # Verde para indígena, marrón para otros
+                base_color = "#228B22" if "indigena" in tipo else "#8B4513" # Color del borde
+
+                # Ajusta la opacidad del relleno según la opción seleccionada
                 fill_opacity = 0.5 if viz_option == "Con Relleno" else 0
+
                 return {
                     "fillColor": base_fill_color,
                     "color": base_color,
@@ -195,96 +190,13 @@ with tab1:
 
             folium.GeoJson(
                 gdf_filtrado,
-                name="Territorios Formalizados", # Nombre de la capa para el LayerControl
                 tooltip=folium.GeoJsonTooltip(
                     fields=["ID_ANT", "NOMBRE", "DEPARTAMEN", "MUNICIPIO", "Tipo", "AREA_TOTAL", "Recons"],
                     aliases=["ID:", "Nombre:", "Departamento:", "Municipio:", "Tipo:", "Área total (ha):", "Reconstruido:"]
                 ),
+                # Pasa la opción de visualización a la función de estilo
                 style_function=lambda x: estilo_tipo(x, visualizacion_poligono)
             ).add_to(m)
-
-            # --- Cargar y mostrar Límites Departamentales (solo contorno y etiquetas) ---
-            gdf_departamentos = None
-            if mostrar_limites_deptos:
-                # Link del shapefile de Departamentos proporcionado por el usuario (RAW content)
-                ruta_departamentos_shp = "https://github.com/lmiguerrero/Ancestrario/raw/main/Departamentos.zip"
-                try:
-                    gdf_departamentos = cargar_shapefile_desde_zip(ruta_departamentos_shp)
-                    folium.GeoJson(
-                        gdf_departamentos,
-                        name="Límites Departamentales",
-                        style_function=lambda x: {
-                            "fillColor": "none", # Sin relleno
-                            "color": "#6c757d", # Gris oscuro para el contorno
-                            "weight": 1.5,
-                            "fillOpacity": 0 # Opacidad del relleno a 0 para solo contorno
-                        }
-                    ).add_to(m)
-                    # Añadir etiquetas de Departamento
-                    for _, row in gdf_departamentos.iterrows():
-                        if row.geometry and not row.geometry.is_empty:
-                            try:
-                                point = row.geometry.representative_point()
-                            except Exception:
-                                point = row.geometry.centroid
-
-                            # Se asume que la columna de nombre del departamento se llama 'DPTO_CNMBR' o 'NOMBRE_DPT'.
-                            # ¡VERIFICA EL NOMBRE REAL DE LA COLUMNA EN TU SHAPEFILE DE DEPARTAMENTOS!
-                            nombre_depto = str(row['DPTO_CNMBR']) if 'DPTO_CNMBR' in row and pd.notna(row['DPTO_CNMBR']) else \
-                                           (str(row['NOMBRE_DPT']) if 'NOMBRE_DPT' in row and pd.notna(row['NOMBRE_DPT']) else "N/A")
-
-                            folium.Marker(
-                                location=[point.y, point.x],
-                                icon=DivIcon(
-                                    icon_size=(150, 20),
-                                    icon_anchor=(75, 10),
-                                    html=f'<div style="font-size: 9pt; font-weight: bold; color: #495057; background-color: rgba(255, 255, 255, 0.7); padding: 2px 5px; border-radius: 3px; white-space: nowrap; text-align: center;">{nombre_depto}</div>'
-                                )
-                            ).add_to(m)
-                except FileNotFoundError:
-                    st.warning(f"Archivo de límites departamentales no encontrado en: {ruta_departamentos_shp}")
-                except Exception as e:
-                    st.warning(f"Error al cargar límites departamentales: {e}")
-
-            # --- La sección de Límites Municipales ha sido eliminada/comentada según lo solicitado ---
-            # gdf_municipios = None
-            # if mostrar_limites_mpios:
-            #     ruta_municipios_shp = "URL_DE_TU_SHAPEFILE_DE_MUNICIPIOS.zip"
-            #     try:
-            #         gdf_municipios = cargar_shapefile_desde_zip(ruta_municipios_shp)
-            #         folium.GeoJson(
-            #             gdf_municipios,
-            #             name="Límites Municipales",
-            #             style_function=lambda x: {
-            #                 "fillColor": "none",
-            #                 "color": "#adb5bd",
-            #                 "weight": 0.8,
-            #                 "fillOpacity": 0
-            #             }
-            #         ).add_to(m)
-            #         for _, row in gdf_municipios.iterrows():
-            #             if row.geometry and not row.geometry.is_empty:
-            #                 try:
-            #                     point = row.geometry.representative_point()
-            #                 except Exception:
-            #                     point = row.geometry.centroid
-            #                 nombre_mpio = str(row['MPIO_CNMBR']) if 'MPIO_CNMBR' in row and pd.notna(row['MPIO_CNMBR']) else \
-            #                                (str(row['NOMBRE_MPIO']) if 'NOMBRE_MPIO' in row and pd.notna(row['NOMBRE_MPIO']) else "N/A")
-            #                 folium.Marker(
-            #                     location=[point.y, point.x],
-            #                     icon=DivIcon(
-            #                         icon_size=(100, 20),
-            #                         icon_anchor=(50, 10),
-            #                         html=f'<div style="font-size: 7pt; color: #6c757d; background-color: rgba(255, 255, 255, 0.7); padding: 1px 3px; border-radius: 2px; white-space: nowrap; text-align: center;">{nombre_mpio}</div>'
-            #                     )
-            #                 ).add_to(m)
-            #     except FileNotFoundError:
-            #         st.warning(f"Archivo de límites municipales no encontrado en: {ruta_municipios_shp}")
-            #     except Exception as e:
-            #         st.warning(f"Error al cargar límites municipales: {e}")
-
-            # --- Añadir LayerControl para que el usuario pueda activar/desactivar las capas ---
-            folium.LayerControl().add_to(m)
 
             # --- Añadir Leyenda al mapa ---
             legend_html = """
@@ -300,7 +212,7 @@ with tab1:
                     font-size:14px;
                     padding:10px;
                     border-radius: 8px;
-                    color: black;
+                    color: black; /* Texto negro para contraste */
                 ">
                     <b>Leyenda de Territorios</b><br>
                     <i style="background:#228B22; opacity:0.7; width:18px; height:18px; float:left; margin-right:8px; border:1px solid #228B22;"></i> Resguardo Indígena<br>
