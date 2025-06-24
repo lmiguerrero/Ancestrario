@@ -246,6 +246,43 @@ with tab1:
                 except Exception as e:
                     st.warning(f"Error al cargar límites departamentales: {e}")
 
+            # --- La sección de Límites Municipales ha sido eliminada/comentada según lo solicitado ---
+            # gdf_municipios = None
+            # if mostrar_limites_mpios:
+            #     ruta_municipios_shp = "URL_DE_TU_SHAPEFILE_DE_MUNICIPIOS.zip"
+            #     try:
+            #         gdf_municipios = cargar_shapefile_desde_zip(ruta_municipios_shp)
+            #         folium.GeoJson(
+            #             gdf_municipios,
+            #             name="Límites Municipales",
+            #             style_function=lambda x: {
+            #                 "fillColor": "none",
+            #                 "color": "#adb5bd",
+            #                 "weight": 0.8,
+            #                 "fillOpacity": 0
+            #             }
+            #         ).add_to(m)
+            #         for _, row in gdf_municipios.iterrows():
+            #             if row.geometry and not row.geometry.is_empty:
+            #                 try:
+            #                     point = row.geometry.representative_point()
+            #                 except Exception:
+            #                     point = row.geometry.centroid
+            #                 nombre_mpio = str(row['MPIO_CNMBR']) if 'MPIO_CNMBR' in row and pd.notna(row['MPIO_CNMBR']) else \
+            #                                (str(row['NOMBRE_MPIO']) if 'NOMBRE_MPIO' in row and pd.notna(row['NOMBRE_MPIO']) else "N/A")
+            #                 folium.Marker(
+            #                     location=[point.y, point.x],
+            #                     icon=DivIcon(
+            #                         icon_size=(100, 20),
+            #                         icon_anchor=(50, 10),
+            #                         html=f'<div style="font-size: 7pt; color: #6c757d; background-color: rgba(255, 255, 255, 0.7); padding: 1px 3px; border-radius: 2px; white-space: nowrap; text-align: center;">{nombre_mpio}</div>'
+            #                     )
+            #                 ).add_to(m)
+            #     except FileNotFoundError:
+            #         st.warning(f"Archivo de límites municipales no encontrado en: {ruta_municipios_shp}")
+            #     except Exception as e:
+            #         st.warning(f"Error al cargar límites municipales: {e}")
+
             # --- Añadir LayerControl para que el usuario pueda activar/desactivar las capas ---
             folium.LayerControl().add_to(m)
 
@@ -342,4 +379,3 @@ st.markdown("""
     <em>© Derechos reservados</em>
 </div>
 """, unsafe_allow_html=True)
-```
