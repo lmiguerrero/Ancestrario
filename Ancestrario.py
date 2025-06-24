@@ -7,23 +7,26 @@ import zipfile
 import tempfile
 import pandas as pd
 from PIL import Image
+import requests # Importar la librería requests para descargar desde URL
+from io import BytesIO # Para manejar el contenido descargado en memoria
 
 # ======================================================================================================================
 # Visor de Territorios Formalizados (Ancestrario)
 #
 # Desarrollado por: Ing. Topográfico Luis Miguel Guerrero
 # Contacto: luis.guerrero@ant.gov.co
-# Actualizado: 24 6 2025
 #
 # Este script de Streamlit permite la visualización y consulta de territorios formalizados en Colombia.
 # Los datos provienen de la Agencia Nacional de Tierras (ANT).
 #
 # Funcionalidades principales:
-# 1. Carga y procesamiento de datos geográficos (Shapefile) desde un archivo ZIP.
+# 1. Carga y procesamiento de datos geográficos (Shapefile) desde un archivo ZIP (ahora con soporte para URL).
 # 2. Interfaz de usuario interactiva para filtrar territorios por ID, Nombre, Tipo, Departamento y Municipio.
-# 3. Visualización de los territorios filtrados en un mapa interactivo (Folium).
-# 4. Presentación de datos tabulares y estadísticas de los resultados de la consulta.
+# 3. Visualización de los territorios filtrados en un mapa interactivo (Folium) con tooltip mejorado y leyenda.
+# 4. Presentación de datos tabulares y estadísticas de los resultados de la consulta, incluyendo nuevos atributos.
 # 5. Opciones para exportar los resultados (CSV, Shapefile ZIP, HTML del mapa).
+#
+# El código ha sido modificado para eliminar la funcionalidad de "Consulta por traslape" a solicitud del usuario.
 # ======================================================================================================================
 
 # --- Estilo visual de la aplicación ---
@@ -48,30 +51,52 @@ st.markdown("Consulta local de territorios por ID o Nombre. Fuente: ANT")
 # Mostrar banner/logo principal
 st.image("Ancestrario.png", use_container_width=True)
 
-# --- Función para cargar shapefile desde ZIP ---
+# --- Función para cargar shapefile desde ZIP (ahora soporta URL) ---
 @st.cache_data # Cachea los datos para mejorar el rendimiento
-def cargar_shapefile_desde_zip(path_zip):
+def cargar_shapefile_desde_zip(zip_source):
     """
     Carga un archivo shapefile contenido dentro de un archivo ZIP.
+    Puede aceptar una ruta de archivo local o una URL.
     Extrae el contenido del ZIP a un directorio temporal y lee el .shp.
     Retorna un GeoDataFrame en CRS EPSG:4326.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
-        with zipfile.ZipFile(path_zip, "r") as zip_ref:
-            zip_ref.extractall(tmpdir) # Extrae todos los archivos del ZIP al directorio temporal
+        if zip_source.startswith("http"):
+            # Descargar el archivo ZIP desde la URL
+            st.info(f"Descargando datos desde: {zip_source}")
+            try:
+                response = requests.get(zip_source, stream=True)
+                response.raise_for_status() # Lanza un error para códigos de estado HTTP incorrectos
+                zip_content = BytesIO(response.content)
+                zip_ref = zipfile.ZipFile(zip_content, "r")
+            except requests.exceptions.RequestException as e:
+                st.error(f"Error al descargar el archivo ZIP: {e}")
+                st.stop() # Detiene la ejecución de la aplicación si falla la descarga
+        else:
+            # Abrir archivo ZIP local
+            zip_ref = zipfile.ZipFile(zip_source, "r")
+
+        with zip_ref as zf:
+            zf.extractall(tmpdir) # Extrae todos los archivos del ZIP al directorio temporal
             # Encuentra el archivo .shp dentro del directorio temporal
-            shp_path = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")][0]
+            shp_paths = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
+            if not shp_paths:
+                st.error("No se encontró ningún archivo .shp dentro del ZIP.")
+                st.stop()
+            shp_path = shp_paths[0]
             return gpd.read_file(shp_path).to_crs(epsg=4326) # Lee el shapefile y lo convierte a WGS84
 
 # --- Cargar shapefile principal de territorios formalizados ---
-ruta_formalizado = "Formalizado.zip" # Ruta al archivo ZIP que contiene el shapefile
+# Nuevo link de descarga desde GitHub
+ruta_formalizado = "https://github.com/lmiguerrero/Ancestrario/raw/main/Formalizados.zip"
 gdf = cargar_shapefile_desde_zip(ruta_formalizado)
-# Convierte cualquier columna de tipo Timestamp a string para evitar errores de serialización
+
+# Asegura que las columnas de tipo Timestamp se conviertan a string para evitar errores de serialización
 for col in gdf.columns:
     if isinstance(gdf[col].iloc[0], pd.Timestamp):
         gdf[col] = gdf[col].astype(str)
 
-# --- Definición de fondos de mapa disponibles para Folium ---
+# --- Fondo de mapa disponible ---
 fondos_disponibles = {
     "OpenStreetMap": "OpenStreetMap",
     "CartoDB Claro (Positron)": "CartoDB positron",
@@ -86,8 +111,12 @@ logo = Image.open("logo_ant.jpg")
 st.sidebar.image(logo, use_container_width=True)
 
 # --- Pestañas de la aplicación ---
+# Solo se mantiene la pestaña de "Consulta por filtros"
 tab1 = st.tabs(["🔍 Consulta por filtros"])[0]
 
+# ===============================
+# PESTAÑA 1: CONSULTA POR FILTROS
+# ===============================
 with tab1:
     st.sidebar.header("🔎 Filtros de búsqueda")
 
@@ -161,7 +190,7 @@ with tab1:
                 tipo = x["properties"]["Tipo"].strip().lower()
                 return {
                     "fillColor": "#228B22" if "indigena" in tipo else "#8B4513", # Verde para indígena, marrón para otros
-                    "color": "#228B22" if "indigena" in tipo else "#8B4513",
+                    "color": "#228B22" if "indigena" in tipo else "#8B4513", # Color del borde
                     "weight": 2,
                     "fillOpacity": 0.5
                 }
@@ -170,11 +199,35 @@ with tab1:
             folium.GeoJson(
                 gdf_filtrado,
                 tooltip=folium.GeoJsonTooltip(
-                    fields=["ID_ANT", "NOMBRE", "DEPARTAMEN", "MUNICIPIO", "Tipo", "AREA_TOTAL"],
-                    aliases=["ID:", "Nombre:", "Departamento:", "Municipio:", "Tipo:", "Área total (ha):"]
+                    # Se añade "Recons" al tooltip
+                    fields=["ID_ANT", "NOMBRE", "DEPARTAMEN", "MUNICIPIO", "Tipo", "AREA_TOTAL", "Recons"],
+                    aliases=["ID:", "Nombre:", "Departamento:", "Municipio:", "Tipo:", "Área total (ha):", "Reconstruido:"]
                 ),
                 style_function=estilo_tipo
             ).add_to(m)
+
+            # --- Añadir Leyenda al mapa ---
+            legend_html = """
+                <div style="
+                    position: fixed;
+                    bottom: 50px;
+                    left: 50px;
+                    width: 180px;
+                    height: 90px;
+                    background-color: white;
+                    border:2px solid grey;
+                    z-index:9999;
+                    font-size:14px;
+                    padding:10px;
+                    border-radius: 8px;
+                ">
+                    <b>Leyenda de Territorios</b><br>
+                    <i style="background:#228B22; opacity:0.7; width:18px; height:18px; float:left; margin-right:8px; border:1px solid #228B22;"></i> Resguardo Indígena<br>
+                    <i style="background:#8B4513; opacity:0.7; width:18px; height:18px; float:left; margin-right:8px; border:1px solid #8B4513;"></i> Consejo Comunitario<br>
+                </div>
+                """
+            m.get_root().html.add_child(folium.Element(legend_html))
+
 
             # Ajusta el mapa para que muestre todos los elementos filtrados
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
@@ -182,7 +235,8 @@ with tab1:
             st_folium(m, width=1200, height=600)
 
             st.subheader("📋 Datos encontrados")
-            # Muestra la tabla de datos de los territorios filtrados (excluyendo la columna de geometría)
+            # Muestra la tabla de datos de los territorios filtrados
+            # Las columnas 'Recons' y 'Dif_Porc' se incluirán automáticamente si existen en el gdf
             st.dataframe(gdf_filtrado.drop(columns="geometry"))
 
             # --- Estadísticas de los resultados ---
@@ -216,6 +270,7 @@ with tab1:
 
             # --- Opciones de exportación de datos ---
             # Exportar a CSV
+            # Las columnas 'Recons' y 'Dif_Porc' se incluirán automáticamente si existen en el gdf
             csv = gdf_filtrado.drop(columns="geometry").to_csv(index=False).encode("utf-8")
             st.download_button("⬇️ Descargar CSV", data=csv, file_name="resultados_formalizados.csv", mime="text/csv")
 
