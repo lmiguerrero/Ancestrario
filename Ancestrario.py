@@ -25,8 +25,6 @@ from io import BytesIO # Para manejar el contenido descargado en memoria
 # 3. Visualización de los territorios filtrados en un mapa interactivo (Folium) con tooltip mejorado y leyenda.
 # 4. Presentación de datos tabulares y estadísticas de los resultados de la consulta, incluyendo nuevos atributos.
 # 5. Opciones para exportar los resultados (CSV, Shapefile ZIP, HTML del mapa).
-#
-# El código ha sido modificado para eliminar la funcionalidad de "Consulta por traslape" a solicitud del usuario.
 # ======================================================================================================================
 
 # --- Estilo visual de la aplicación ---
@@ -220,6 +218,7 @@ with tab1:
                     font-size:14px;
                     padding:10px;
                     border-radius: 8px;
+                    color: black; /* Texto negro para contraste */
                 ">
                     <b>Leyenda de Territorios</b><br>
                     <i style="background:#228B22; opacity:0.7; width:18px; height:18px; float:left; margin-right:8px; border:1px solid #228B22;"></i> Resguardo Indígena<br>
@@ -288,7 +287,6 @@ with tab1:
                 with open(zip_path, "rb") as f:
                     st.download_button("⬇️ Descargar SHP filtrado (.zip)", data=f, file_name="shapefile_filtrado.zip", mime="application/zip")
 
-            # Exportar el mapa a HTML
             if exportar_html:
                 with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmpfile:
                     m.save(tmpfile.name) # Guarda el mapa de Folium como HTML
